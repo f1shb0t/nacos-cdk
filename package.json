@@ -1,0 +1,28 @@
+{
+  "name": "nacos-cdk",
+  "version": "1.0.0",
+  "description": "Nacos 3.1.1 cluster on AWS EC2 + ASG + NLB + Address Server",
+  "private": true,
+  "bin": {
+    "nacos-cdk": "bin/nacos-cdk.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy --require-approval never",
+    "destroy": "cdk destroy"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "aws-cdk": "^2.150.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.150.0",
+    "constructs": "^10.3.0",
+    "source-map-support": "^0.5.21"
+  }
+}

@@ -1,0 +1,12 @@
+*.js
+!jest.config.js
+*.d.ts
+node_modules
+cdk.out/
+cdk.context.json
+.DS_Store
+*.log
+.idea/
+.vscode/
+cdk.context.json
+cdk.out/
