@@ -163,7 +163,8 @@ export class NacosClusterStack extends cdk.Stack {
         enabled: true,
         path: '/nacos/serverlist',
         healthyHttpCodes: '200',
-        interval: cdk.Duration.seconds(30),
+        interval: cdk.Duration.seconds(60),
+        timeout: cdk.Duration.seconds(10),
       },
     });
 
