@@ -142,6 +142,7 @@ npx cdk deploy \
   -c auroraDbName=nacos_prod \
   -c auroraUser=nacos \
   -c auroraPasswordSecretArn=arn:aws:secretsmanager:us-east-1:111122223333:secret:nacos/aurora/password-XXXXXX \
+  -c auroraSecurityGroupId=sg-xxxxxxxx \
   -c nacosTokenSecretKeyParameter=/nacos/auth/token-secret-key \
   -c nacosIdentityKeyParameter=/nacos/auth/identity-key \
   -c nacosIdentityValueParameter=/nacos/auth/identity-value \
@@ -170,6 +171,8 @@ npx cdk deploy \
 | `minCapacity` | ❌ | `3` | ASG 最小 |
 | `maxCapacity` | ❌ | `6` | ASG 最大 |
 | `instanceType` | ❌ | `c7i.2xlarge` | EC2 规格 |
+| `auroraSecurityGroupId` | ⭐ 推荐 | - | Aurora SG ID。**传了就自动加 inbound 3306 from Nacos cluster SG，不用手动加**（见 §5） |
+| `authEnabled` | ❌ | `true` | 是否开启 Nacos 鉴权。生产保持 true，HA/压测场景可设 `false` |
 | `ampRemoteWriteUrl` | ❌ | 留空 | 传了就装 ADOT sidecar 上报 AMP |
 | `nacosVersion` | ❌ | `3.1.1` | Nacos 版本 |
 | `keyName` | ❌ | 不绑 | EC2 SSH key |
@@ -188,9 +191,22 @@ ClusterSgId       = sg-xxxxxxxx
 ConsoleUrl        = http://nacos-internal-nlb-xxxxxxxx.elb.us-east-1.amazonaws.com:8080/index.html
 ```
 
-### 5. ⚠️ 必须手动做的：把 ClusterSG 加到 Aurora SG inbound
+### 5. Aurora SG 网络打通
 
-CDK 不能改你客户的 Aurora SG。你需要手动加一条 inbound：
+CDK 部署的 Nacos 节点需要连 Aurora 的 3306，要放行 SG。
+
+**方式 A（推荐）：部署时传 `auroraSecurityGroupId` 参数，CDK 自动加规则**
+
+在 deploy 命令里加一行：
+```bash
+  -c auroraSecurityGroupId=sg-xxxxxxxx
+```
+
+CDK 自动给这个 SG 加 `inbound TCP 3306 from NacosClusterSg`，**无需手动操作**。
+
+**方式 B：手动加**
+
+如果没传这个参数，拿 CDK 输出的 `ClusterSgId` 手动加：
 
 ```bash
 aws ec2 authorize-security-group-ingress \
