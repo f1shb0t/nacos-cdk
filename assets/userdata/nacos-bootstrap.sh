@@ -298,7 +298,12 @@ service:
       exporters: [prometheusremotewrite]
   telemetry:
     metrics:
-      address: 127.0.0.1:8888
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: '127.0.0.1'
+                port: 8888
 EOF
 
     mkdir -p /etc/systemd/system/aws-otel-collector.service.d
