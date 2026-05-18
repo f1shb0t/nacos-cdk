@@ -83,14 +83,14 @@ export class NacosClusterStack extends cdk.Stack {
     clusterSg.addIngressRule(clusterSg, ec2.Port.tcp(9090), 'AddressServer (peer)');
 
     // NLB -> 节点
-    clusterSg.addIngressRule(nlbSg, ec2.Port.tcp(8848), 'NLB -> 8848');
-    clusterSg.addIngressRule(nlbSg, ec2.Port.tcp(9848), 'NLB -> 9848');
-    clusterSg.addIngressRule(nlbSg, ec2.Port.tcp(8080), 'NLB -> 8080');
+    clusterSg.addIngressRule(nlbSg, ec2.Port.tcp(8848), 'NLB to 8848');
+    clusterSg.addIngressRule(nlbSg, ec2.Port.tcp(9848), 'NLB to 9848');
+    clusterSg.addIngressRule(nlbSg, ec2.Port.tcp(8080), 'NLB to 8080');
 
     // VPC CIDR -> NLB（默认放开 VPC 内网）
-    nlbSg.addIngressRule(ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.tcp(8848), 'VPC -> 8848');
-    nlbSg.addIngressRule(ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.tcp(9848), 'VPC -> 9848');
-    nlbSg.addIngressRule(ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.tcp(8080), 'VPC -> 8080');
+    nlbSg.addIngressRule(ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.tcp(8848), 'VPC to 8848');
+    nlbSg.addIngressRule(ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.tcp(9848), 'VPC to 9848');
+    nlbSg.addIngressRule(ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.tcp(8080), 'VPC to 8080');
 
     // === 3. Address Server (Lambda + API Gateway HTTP API) ===
     // Nacos 的 nacos.core.member.lookup.type=address-server 会去 GET 一个 URL 拿 IP 列表（一行一个）
