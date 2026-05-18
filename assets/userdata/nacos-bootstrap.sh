@@ -72,7 +72,24 @@ fi
 [ -z "${NACOS_ID_VALUE}" ] && NACOS_ID_VALUE=$(openssl rand -hex 16)
 
 # === 4. 写 application.properties ===
-cat > /opt/nacos/conf/application.properties <<EOF
+# 策略：保留 Nacos tarball 自带的官方默认 application.properties（含所有
+# 必需字段如 nacos.server.contextPath、nacos.console.* 等），只在末尾追加
+# 我们的环境特定配置。注意 Java Properties 文件后写的覆盖前写的，所以
+# 追加这些就能覆盖默认值。
+
+# 备份原始模板（首次启动时）
+[ ! -f /opt/nacos/conf/application.properties.original ] && \
+    cp /opt/nacos/conf/application.properties /opt/nacos/conf/application.properties.original
+
+# 每次都从原始模板重新拼，避免重复追加
+cp /opt/nacos/conf/application.properties.original /opt/nacos/conf/application.properties
+
+cat >> /opt/nacos/conf/application.properties <<EOF
+
+#=================================================================
+# === 以下为 CDK 注入的环境特定配置（覆盖上面默认值）===
+#=================================================================
+
 #=========== Datasource ============
 spring.sql.init.platform=mysql
 db.num=1
@@ -88,20 +105,17 @@ db.pool.config.keepaliveTime=20000
 db.pool.config.validationTimeout=3000
 db.pool.config.connectionTimeout=5000
 
-#=========== 鉴权 ============
-nacos.core.auth.enabled=true
-nacos.core.auth.console.enabled=true
+#=========== 鉴权（覆盖默认值）============
+nacos.core.auth.enabled=${NACOS_AUTH_ENABLED:-true}
+nacos.core.auth.admin.enabled=${NACOS_AUTH_ENABLED:-true}
+nacos.core.auth.console.enabled=${NACOS_AUTH_ENABLED:-true}
 nacos.core.auth.system.type=nacos
 nacos.core.auth.plugin.nacos.token.expire.seconds=18000
 nacos.core.auth.plugin.nacos.token.secret.key=${NACOS_TOKEN_KEY}
 nacos.core.auth.server.identity.key=${NACOS_ID_KEY}
 nacos.core.auth.server.identity.value=${NACOS_ID_VALUE}
 
-#=========== 端口 ============
-server.port=8848
-nacos.console.port=8080
-
-#=========== 集群成员发现：address-server 模式 ============
+#=========== 集群成员发现：address-server 模式（覆盖默认 file 模式）===========
 # 节点定期 GET http(s)://\${address.server.domain}:\${address.server.port}\${address.server.url}
 # 拿其他节点 IP 列表（一行一个），由 Lambda 实时返回 ASG InService 实例 IP
 nacos.core.member.lookup.type=address-server
@@ -109,13 +123,17 @@ address.server.domain=${ADDRESS_SERVER_DOMAIN}
 address.server.port=${ADDRESS_SERVER_PORT}
 address.server.url=${ADDRESS_SERVER_URL}
 
-#=========== 日志 ============
+#=========== 日志路径 ============
 nacos.logs.path=/opt/nacos/logs
 
 #=========== Prometheus 监控 ============
 management.endpoints.web.exposure.include=prometheus
 nacos.prometheus.metrics.enabled=true
 EOF
+
+echo "=== application.properties prepared ==="
+echo "原始模板字段数: $(grep -cv '^\s*#\|^\s*$' /opt/nacos/conf/application.properties.original)"
+echo "最终配置字段数: $(grep -cv '^\s*#\|^\s*$' /opt/nacos/conf/application.properties)"
 
 # === 5. 改 startup.sh：JVM 参数 ===
 # 5.1 加 DNS TTL（Aurora failover 必备）

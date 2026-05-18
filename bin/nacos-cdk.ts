@@ -58,6 +58,9 @@ new NacosClusterStack(app, ctx('stackName', 'NacosCluster')!, {
 
   // === Aurora SG（可选，传了就自动加 inbound 3306 规则，不用手动加）===
   auroraSecurityGroupId: ctx('auroraSecurityGroupId'),
+
+  // === 鉴权开关（默认 true=开启鉴权；测试/演示时可设 false 跳过）===
+  authEnabled: ctx('authEnabled', 'true')!.toLowerCase() !== 'false',
 });
 
 app.synth();

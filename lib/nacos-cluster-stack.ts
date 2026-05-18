@@ -50,6 +50,9 @@ export interface NacosClusterStackProps extends cdk.StackProps {
 
   /** Aurora SG ID（可选，传了就自动给 Aurora SG 加 inbound 3306 from Nacos cluster SG）*/
   auroraSecurityGroupId?: string;
+
+  /** 是否开启鉴权（默认 true；HA 测试场景可以设 false 跳过 token） */
+  authEnabled: boolean;
 }
 
 export class NacosClusterStack extends cdk.Stack {
@@ -218,6 +221,7 @@ export class NacosClusterStack extends cdk.Stack {
     userData.addCommands(
       `cat > /tmp/nacos-vars.env <<'NACOS_VARS_EOF'`,
       `NACOS_VERSION="${props.nacosVersion}"`,
+      `NACOS_AUTH_ENABLED="${props.authEnabled}"`,
       `AURORA_ENDPOINT="${props.auroraEndpoint}"`,
       `AURORA_DB_NAME="${props.auroraDbName}"`,
       `AURORA_USER="${props.auroraUser}"`,
