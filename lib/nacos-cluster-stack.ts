@@ -104,7 +104,10 @@ export class NacosClusterStack extends cdk.Stack {
       environment: {
         ASG_NAME: '', // 会在 ASG 创建后通过 addEnvironment 补上
       },
-      logRetention: logs.RetentionDays.ONE_WEEK,
+      logGroup: new logs.LogGroup(this, 'AddressServerLogGroup', {
+        retention: logs.RetentionDays.ONE_WEEK,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
     });
 
     addressServerFn.addToRolePolicy(new iam.PolicyStatement({
@@ -230,7 +233,9 @@ export class NacosClusterStack extends cdk.Stack {
       role,
       securityGroup: clusterSg,
       userData,
-      keyName: props.keyName,
+      keyPair: props.keyName
+        ? ec2.KeyPair.fromKeyPairName(this, 'KeyPair', props.keyName)
+        : undefined,
       blockDevices: [
         {
           deviceName: '/dev/xvda',
@@ -251,8 +256,9 @@ export class NacosClusterStack extends cdk.Stack {
       desiredCapacity: props.desiredCapacity,
       minCapacity: props.minCapacity,
       maxCapacity: props.maxCapacity,
-      healthCheck: autoscaling.HealthCheck.elb({
-        grace: cdk.Duration.minutes(5), // Nacos 启动慢，给足时间
+      healthChecks: autoscaling.HealthChecks.withAdditionalChecks({
+        additionalTypes: [autoscaling.AdditionalHealthCheckType.ELB],
+        gracePeriod: cdk.Duration.minutes(5), // Nacos 启动慢，给足时间
       }),
       // 滚动更新策略：一次替换一台，等新节点 InService 后再下一台
       updatePolicy: autoscaling.UpdatePolicy.rollingUpdate({
