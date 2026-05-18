@@ -47,6 +47,9 @@ export interface NacosClusterStackProps extends cdk.StackProps {
 
   /** SSH key 名（可选）*/
   keyName?: string;
+
+  /** Aurora SG ID（可选，传了就自动给 Aurora SG 加 inbound 3306 from Nacos cluster SG）*/
+  auroraSecurityGroupId?: string;
 }
 
 export class NacosClusterStack extends cdk.Stack {
@@ -91,6 +94,14 @@ export class NacosClusterStack extends cdk.Stack {
     nlbSg.addIngressRule(ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.tcp(8848), 'VPC to 8848');
     nlbSg.addIngressRule(ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.tcp(9848), 'VPC to 9848');
     nlbSg.addIngressRule(ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.tcp(8080), 'VPC to 8080');
+
+    // === Aurora SG: 自動加 inbound 3306（可选，传了 auroraSecurityGroupId 就加）===
+    if (props.auroraSecurityGroupId) {
+      const auroraSg = ec2.SecurityGroup.fromSecurityGroupId(
+        this, 'AuroraSg', props.auroraSecurityGroupId
+      );
+      auroraSg.addIngressRule(clusterSg, ec2.Port.tcp(3306), 'Nacos cluster to Aurora 3306');
+    }
 
     // === 3. Address Server (Lambda + API Gateway HTTP API) ===
     // Nacos 的 nacos.core.member.lookup.type=address-server 会去 GET 一个 URL 拿 IP 列表（一行一个）

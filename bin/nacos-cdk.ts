@@ -55,6 +55,9 @@ new NacosClusterStack(app, ctx('stackName', 'NacosCluster')!, {
 
   // === SSH key（可选）===
   keyName: ctx('keyName'),
+
+  // === Aurora SG（可选，传了就自动加 inbound 3306 规则，不用手动加）===
+  auroraSecurityGroupId: ctx('auroraSecurityGroupId'),
 });
 
 app.synth();
