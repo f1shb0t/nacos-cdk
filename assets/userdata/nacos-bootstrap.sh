@@ -84,6 +84,14 @@ fi
 # 每次都从原始模板重新拼，避免重复追加
 cp /opt/nacos/conf/application.properties.original /opt/nacos/conf/application.properties
 
+# ⚠️ 关键步骤：删除原始模板中 3 个空值的 auth key 字段
+# Nacos 自带的 startup.sh 会扫描这些字段为空时进入交互式 read，systemd 非交互
+# 环境下会死循环报 "Invalid Base64 string". 我们后面会用追加方式注入有值的版本，
+# 所以先把原始空行删掉。
+sed -i '/^nacos\.core\.auth\.plugin\.nacos\.token\.secret\.key=\s*$/d' /opt/nacos/conf/application.properties
+sed -i '/^nacos\.core\.auth\.server\.identity\.key=\s*$/d' /opt/nacos/conf/application.properties
+sed -i '/^nacos\.core\.auth\.server\.identity\.value=\s*$/d' /opt/nacos/conf/application.properties
+
 cat >> /opt/nacos/conf/application.properties <<EOF
 
 #=================================================================
