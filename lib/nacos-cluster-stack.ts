@@ -4,9 +4,8 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as autoscaling from 'aws-cdk-lib/aws-autoscaling';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import * as elbv2Targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
-import * as apigwv2Integ from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -109,6 +108,11 @@ export class NacosClusterStack extends cdk.Stack {
     // === 3. Address Server (Lambda + API Gateway HTTP API) ===
     // Nacos 的 nacos.core.member.lookup.type=address-server 会去 GET 一个 URL 拿 IP 列表（一行一个）
     // 我们用 Lambda 实时查 ASG 实例 IP，避免 ASG 扩缩容时手动维护 cluster.conf
+    //
+    // 关键设计选择：用 内部 ALB(HTTP) + Lambda target 而不是 API Gateway，原因：
+    // 1) Nacos 3.1.1 AddressServerMemberLookup 源码硬编码 HTTP_PREFIX="http://"，不支持 HTTPS
+    // 2) API Gateway HTTP API 强制 HTTPS，导致 Nacos 走 http://...:443 协议错配 → 400
+    // 3) 内部 ALB 默认只在 VPC 内可达，比 public API GW 安全得多（解决了之前的对外开放风险）
     const addressServerFn = new lambda.Function(this, 'AddressServerFn', {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.handler',
@@ -132,20 +136,39 @@ export class NacosClusterStack extends cdk.Stack {
       resources: ['*'],
     }));
 
-    const addressApi = new apigwv2.HttpApi(this, 'AddressServerApi', {
-      apiName: `${id}-address-server`,
-      description: 'Returns current Nacos node IPs (one per line) for cluster.address-server lookup',
+    // 内部 ALB：只在 VPC 内可达
+    const addressAlbSg = new ec2.SecurityGroup(this, 'AddressServerAlbSg', {
+      vpc,
+      description: 'Address server internal ALB',
+      allowAllOutbound: true,
+    });
+    // 只允许 Nacos cluster 节点访问 80 端口
+    addressAlbSg.addIngressRule(clusterSg, ec2.Port.tcp(80), 'Nacos nodes to address ALB');
+
+    const addressAlb = new elbv2.ApplicationLoadBalancer(this, 'AddressServerAlb', {
+      vpc,
+      vpcSubnets,
+      internetFacing: false,
+      securityGroup: addressAlbSg,
     });
 
-    addressApi.addRoutes({
-      path: '/nacos/serverlist',
-      methods: [apigwv2.HttpMethod.GET],
-      integration: new apigwv2Integ.HttpLambdaIntegration('AddressIntegration', addressServerFn),
+    const addressListener = addressAlb.addListener('AddressListener80', {
+      port: 80,
+      protocol: elbv2.ApplicationProtocol.HTTP,
     });
 
-    // API Gateway endpoint，例如 https://abc123.execute-api.us-east-1.amazonaws.com
-    // 提取 host，给 userdata 用
-    const addressApiHost = cdk.Fn.select(2, cdk.Fn.split('/', addressApi.url!));
+    addressListener.addTargets('AddressLambdaTarget', {
+      targets: [new elbv2Targets.LambdaTarget(addressServerFn)],
+      healthCheck: {
+        enabled: true,
+        path: '/nacos/serverlist',
+        healthyHttpCodes: '200',
+        interval: cdk.Duration.seconds(30),
+      },
+    });
+
+    // ALB DNS 给 userdata 用（HTTP，端口 80）
+    const addressAlbDns = addressAlb.loadBalancerDnsName;
 
     // === 4. EC2 Role ===
     const role = new iam.Role(this, 'NacosNodeRole', {
@@ -229,10 +252,9 @@ export class NacosClusterStack extends cdk.Stack {
       `NACOS_TOKEN_SECRET_KEY_PARAM="${props.nacosTokenSecretKeyParameter ?? ''}"`,
       `NACOS_IDENTITY_KEY_PARAM="${props.nacosIdentityKeyParameter ?? ''}"`,
       `NACOS_IDENTITY_VALUE_PARAM="${props.nacosIdentityValueParameter ?? ''}"`,
-      `ADDRESS_SERVER_DOMAIN="${addressApiHost}"`,
-      `ADDRESS_SERVER_PORT="443"`,
+      `ADDRESS_SERVER_DOMAIN="${addressAlbDns}"`,
+      `ADDRESS_SERVER_PORT="80"`,
       `ADDRESS_SERVER_URL="/nacos/serverlist"`,
-      `ADDRESS_SERVER_USE_TLS="true"`,
       `AMP_REMOTE_WRITE_URL="${props.ampRemoteWriteUrl ?? ''}"`,
       `AWS_REGION_NAME="${this.region}"`,
       `NACOS_VARS_EOF`,
@@ -372,7 +394,7 @@ export class NacosClusterStack extends cdk.Stack {
     });
 
     new cdk.CfnOutput(this, 'AddressServerUrl', {
-      value: addressApi.url ?? '',
+      value: `http://${addressAlb.loadBalancerDnsName}/nacos/serverlist`,
       description: 'Address server URL (Nacos nodes use this to discover peers)',
     });
 
